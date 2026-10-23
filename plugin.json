@@ -1,0 +1,12 @@
+{
+  "name": "agy-quota-live",
+  "displayName": "AGY Quota Live HUD",
+  "version": "1.0.0",
+  "description": "Real-time 2-line status HUD for Antigravity CLI showing all /quota buckets (Gemini, Claude/GPT, Argon) with live updates and reset timers.",
+  "logo": "assets/logo.svg",
+  "suggestedPrompts": [
+    "Run quota-live doctor to inspect all /quota buckets and sync status",
+    "Check my remaining 5-hour and weekly quota across Gemini, Claude/GPT, and Argon",
+    "Force refresh the agy-quota-live HUD cache"
+  ]
+}

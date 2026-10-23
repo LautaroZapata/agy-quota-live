@@ -1,0 +1,49 @@
+{
+  "name": "agy-quota-live",
+  "version": "1.0.0",
+  "description": "Real-time 2-line status HUD for Antigravity CLI showing all /quota buckets (Gemini, Claude/GPT, Argon) with live updates and reset timers.",
+  "main": "src/cli.js",
+  "bin": {
+    "agy-quota-live": "./src/cli.js"
+  },
+  "files": [
+    "assets",
+    "bin",
+    "skills",
+    "src",
+    "hooks.json",
+    "plugin.json",
+    "README.md",
+    "README.es.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "doctor": "node src/cli.js doctor",
+    "install-hud": "node src/cli.js install",
+    "uninstall-hud": "node src/cli.js uninstall",
+    "refresh": "node src/cli.js refresh"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/LautaroZapata/agy-quota-live.git"
+  },
+  "homepage": "https://github.com/LautaroZapata/agy-quota-live#readme",
+  "bugs": {
+    "url": "https://github.com/LautaroZapata/agy-quota-live/issues"
+  },
+  "keywords": [
+    "antigravity",
+    "agy",
+    "hud",
+    "statusline",
+    "quota",
+    "gemini",
+    "claude",
+    "argon"
+  ],
+  "author": "Lautaro Zapata",
+  "license": "MIT",
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}

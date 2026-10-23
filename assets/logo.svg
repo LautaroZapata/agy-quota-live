@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" width="128" height="128" fill="none">
+  <rect x="14" y="14" width="100" height="100" rx="22" fill="#0F172A" stroke="#38BDF8" stroke-width="4"/>
+  <!-- Top HUD bar -->
+  <rect x="28" y="34" width="24" height="8" rx="4" fill="#38BDF8"/>
+  <rect x="58" y="34" width="42" height="8" rx="4" fill="#334155"/>
+  <rect x="58" y="34" width="28" height="8" rx="4" fill="#22C55E"/>
+  <!-- Quota bars (3 groups) -->
+  <rect x="28" y="56" width="72" height="10" rx="5" fill="#1E293B"/>
+  <rect x="28" y="56" width="66" height="10" rx="5" fill="#22C55E"/>
+  <rect x="28" y="74" width="72" height="10" rx="5" fill="#1E293B"/>
+  <rect x="28" y="74" width="42" height="10" rx="5" fill="#FACC15"/>
+  <rect x="28" y="92" width="72" height="10" rx="5" fill="#1E293B"/>
+  <rect x="28" y="92" width="54" height="10" rx="5" fill="#38BDF8"/>
+  <!-- Live lightning bolt badge -->
+  <path d="M96 22L84 40H94L90 54L104 34H93L96 22Z" fill="#FACC15" stroke="#0F172A" stroke-width="2" stroke-linejoin="round"/>
+</svg>
