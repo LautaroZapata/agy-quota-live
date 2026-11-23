@@ -5,14 +5,15 @@ const os = require("node:os");
 const path = require("node:path");
 const { spawn } = require("node:child_process");
 const { getAccessToken, invalidateTokenCache } = require("./token");
+const { AGY_DIR, writeFileAtomicSync } = require("./config");
 
-const AGY_DIR = path.join(os.homedir(), ".gemini", "antigravity-cli");
 const CACHE_PATH = path.join(AGY_DIR, "agy-quota-live-cache.json");
 const LOCK_PATH = path.join(AGY_DIR, "agy-quota-live.lock");
+const SETTINGS_PATH = path.join(AGY_DIR, "settings.json");
 
 const QUOTA_ENDPOINT = "https://daily-cloudcode-pa.googleapis.com/v1internal:retrieveUserQuotaSummary";
 const DEFAULT_PROJECT = "aicode-consumers";
-const DEFAULT_CLI_VERSION = "1.4.5";
+const DEFAULT_CLI_VERSION = "1.5.14";
 
 const BUCKET_META = {
   "gemini-5h": {
@@ -63,6 +64,22 @@ const BUCKET_META = {
     shortWindow: "5h",
     order: 6,
   },
+  "gemini-carbon-wtu-weekly": {
+    groupKey: "carbon",
+    groupTitle: "Gemini 4 Carbon",
+    shortGroup: "Carbon",
+    window: "weekly",
+    shortWindow: "Sem",
+    order: 7,
+  },
+  "gemini-carbon-wtu-5h": {
+    groupKey: "carbon",
+    groupTitle: "Gemini 4 Carbon",
+    shortGroup: "Carbon",
+    window: "5h",
+    shortWindow: "5h",
+    order: 8,
+  },
 };
 
 function buildUserAgent(version) {
@@ -77,6 +94,31 @@ function clamp01(num) {
   if (num < 0) return 0;
   if (num > 1) return 1;
   return num;
+}
+
+function extractGroupModels(groupDescription = "", groupKey = "", groupTitle = "") {
+  const desc = String(groupDescription || "").trim();
+  const match = desc.match(/Models within this group:\s*(.+)$/i);
+  if (match && match[1]) {
+    const items = match[1]
+      .replace(/\.$/, "")
+      .split(",")
+      .map((item) => item.trim())
+      .filter(Boolean);
+    if (items.length > 0) return items;
+  }
+  if (groupKey === "argon") return ["Gemini 4 Argon"];
+  if (groupKey === "carbon") return ["Gemini 4 Carbon"];
+  if (groupKey === "neon") return ["Gemini 4 Neon"];
+  if (groupKey === "hydrogen") return ["Gemini 4 Hydrogen"];
+  if (groupKey === "gemini") {
+    return ["Gemini 4 Neon", "Gemini 4 Hydrogen", "Gemini 3.8 Flash"];
+  }
+  if (groupKey === "3p") {
+    return ["Claude Opus 5.5", "Claude Sonnet 5.5", "GPT-OSS 120B"];
+  }
+  if (groupTitle) return [groupTitle];
+  return [];
 }
 
 function inferMeta(bucketId, groupDisplayName = "", windowStr = "", displayName = "") {
@@ -96,7 +138,42 @@ function inferMeta(bucketId, groupDisplayName = "", windowStr = "", displayName 
       order: is5h ? 5 : 6,
     };
   }
-  if (lowerId.startsWith("3p") || lowerGroup.includes("claude") || lowerGroup.includes("gpt")) {
+  if (lowerId.includes("carbon") || lowerGroup.includes("carbon")) {
+    return {
+      groupKey: "carbon",
+      groupTitle: groupDisplayName || "Gemini 4 Carbon",
+      shortGroup: "Carbon",
+      window: is5h ? "5h" : "weekly",
+      shortWindow,
+      order: is5h ? 7 : 8,
+    };
+  }
+  if (lowerId.includes("neon") || lowerGroup.includes("neon")) {
+    return {
+      groupKey: "neon",
+      groupTitle: groupDisplayName || "Gemini 4 Neon",
+      shortGroup: "Neon",
+      window: is5h ? "5h" : "weekly",
+      shortWindow,
+      order: is5h ? 9 : 10,
+    };
+  }
+  if (lowerId.includes("hydrogen") || lowerGroup.includes("hydrogen")) {
+    return {
+      groupKey: "hydrogen",
+      groupTitle: groupDisplayName || "Gemini 4 Hydrogen",
+      shortGroup: "Hydrogen",
+      window: is5h ? "5h" : "weekly",
+      shortWindow,
+      order: is5h ? 11 : 12,
+    };
+  }
+  if (
+    lowerId.startsWith("3p") ||
+    lowerGroup.includes("claude") ||
+    lowerGroup.includes("gpt") ||
+    lowerGroup.includes("oss")
+  ) {
     return {
       groupKey: "3p",
       groupTitle: groupDisplayName || "Claude and GPT models",
@@ -138,19 +215,28 @@ function parseQuotaSummaryResponse(json) {
     for (const raw of list) {
       const id = raw?.bucketId;
       if (!id || typeof id !== "string") continue;
+      const disabled = raw.disabled === true;
+      const hasAmount = typeof raw.remainingAmount === "number" && Number.isFinite(raw.remainingAmount);
       // Note: proto3 JSON omits numeric fields equal to 0
-      const remainingFraction = clamp01(typeof raw.remainingFraction === "number" ? raw.remainingFraction : 0);
+      const remainingFraction = clamp01(
+        typeof raw.remainingFraction === "number" ? raw.remainingFraction : 0
+      );
       const meta = inferMeta(id, groupName, raw.window, raw.displayName);
+      const groupTitle = groupName || meta.groupTitle;
+      const groupModels = extractGroupModels(groupDesc, meta.groupKey, groupTitle);
       buckets[id] = {
         id,
         remainingFraction,
         remainingPct: Math.round(remainingFraction * 100),
+        ...(hasAmount ? { remainingAmount: raw.remainingAmount } : {}),
+        ...(disabled ? { disabled: true } : {}),
         resetTime: typeof raw.resetTime === "string" ? raw.resetTime : "",
         window: raw.window || meta.window,
         displayName: raw.displayName || "",
         description: raw.description || "",
-        groupTitle: groupName || meta.groupTitle,
+        groupTitle,
         groupDescription: groupDesc,
+        groupModels,
         groupKey: meta.groupKey,
         shortGroup: meta.shortGroup,
         shortWindow: meta.shortWindow,
@@ -176,18 +262,29 @@ function readCache() {
   return null;
 }
 
+function readOrchestratorSettings(settingsPath = SETTINGS_PATH) {
+  try {
+    if (!fs.existsSync(settingsPath)) return null;
+    const raw = fs.readFileSync(settingsPath, "utf8").replace(/^\uFEFF/, "");
+    const parsed = JSON.parse(raw);
+    if (parsed && typeof parsed.orchestrator === "object" && parsed.orchestrator !== null) {
+      return parsed.orchestrator;
+    }
+  } catch {
+    // ignore
+  }
+  return null;
+}
+
 function writeCache(nextData) {
   try {
-    fs.mkdirSync(path.dirname(CACHE_PATH), { recursive: true });
     const existing = readCache() || {};
     const merged = {
       ...existing,
       ...nextData,
       updatedAt: Date.now(),
     };
-    const tmpPath = `${CACHE_PATH}.${process.pid}.tmp`;
-    fs.writeFileSync(tmpPath, JSON.stringify(merged, null, 2), { mode: 0o600 });
-    fs.renameSync(tmpPath, CACHE_PATH);
+    writeFileAtomicSync(CACHE_PATH, JSON.stringify(merged, null, 2), { mode: 0o600 });
     return merged;
   } catch {
     return nextData;
@@ -321,12 +418,25 @@ function mergeQuotas(cacheData, stdinQuota, nowMs = Date.now()) {
 
   for (const [id, b] of Object.entries(cacheBuckets)) {
     if (!b || typeof b !== "object") continue;
-    merged[id] = { ...b, source: "cloud" };
+    const groupModels =
+      Array.isArray(b.groupModels) && b.groupModels.length > 0
+        ? b.groupModels
+        : extractGroupModels(b.groupDescription, b.groupKey, b.groupTitle);
+    merged[id] = { ...b, groupModels, source: "cloud" };
   }
 
   if (stdinQuota && typeof stdinQuota === "object") {
     for (const [id, sb] of Object.entries(stdinQuota)) {
       if (!sb || typeof sb !== "object") continue;
+      const disabled = sb.disabled === true;
+      const stdinAmount =
+        typeof sb.remaining_amount === "number"
+          ? sb.remaining_amount
+          : typeof sb.remainingAmount === "number"
+          ? sb.remainingAmount
+          : undefined;
+      const hasStdinFrac =
+        typeof sb.remaining_fraction === "number" || typeof sb.remainingFraction === "number";
       const stdinFrac = clamp01(
         typeof sb.remaining_fraction === "number"
           ? sb.remaining_fraction
@@ -349,14 +459,36 @@ function mergeQuotas(cacheData, stdinQuota, nowMs = Date.now()) {
           id,
           remainingFraction: stdinFrac,
           remainingPct: Math.round(stdinFrac * 100),
+          ...(stdinAmount !== undefined ? { remainingAmount: stdinAmount } : {}),
+          ...(disabled ? { disabled: true } : {}),
           resetTime: stdinReset,
           window: meta.window,
           displayName: "",
           groupTitle: meta.groupTitle,
+          groupModels: extractGroupModels("", meta.groupKey, meta.groupTitle),
           groupKey: meta.groupKey,
           shortGroup: meta.shortGroup,
           shortWindow: meta.shortWindow,
           order: meta.order,
+          source: "stdin",
+        };
+        continue;
+      }
+
+      if (disabled) {
+        merged[id] = {
+          ...cloudBucket,
+          disabled: true,
+          source: "stdin",
+        };
+        continue;
+      }
+
+      if (!hasStdinFrac && stdinAmount !== undefined) {
+        merged[id] = {
+          ...cloudBucket,
+          remainingAmount: stdinAmount,
+          resetTime: cloudBucket.resetTime || stdinReset,
           source: "stdin",
         };
         continue;
@@ -401,7 +533,12 @@ function mergeQuotas(cacheData, stdinQuota, nowMs = Date.now()) {
 module.exports = {
   CACHE_PATH,
   LOCK_PATH,
+  DEFAULT_CLI_VERSION,
+  extractGroupModels,
+  inferMeta,
+  parseQuotaSummaryResponse,
   readCache,
+  readOrchestratorSettings,
   writeCache,
   refreshQuotaCache,
   spawnBackgroundRefresh,

@@ -4,6 +4,7 @@ const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
 const { execFileSync } = require("node:child_process");
+const { writeFileAtomicSync } = require("./config");
 
 const AGY_DIR = path.join(os.homedir(), ".gemini", "antigravity-cli");
 const TOKEN_CACHE_PATH = path.join(AGY_DIR, "agy-quota-live-token.json");
@@ -149,10 +150,8 @@ function readCachedToken() {
 function writeCachedToken(entry) {
   if (!entry || !entry.accessToken) return;
   try {
-    fs.mkdirSync(path.dirname(TOKEN_CACHE_PATH), { recursive: true });
-    const tmpPath = `${TOKEN_CACHE_PATH}.${process.pid}.tmp`;
-    fs.writeFileSync(
-      tmpPath,
+    writeFileAtomicSync(
+      TOKEN_CACHE_PATH,
       JSON.stringify({
         accessToken: entry.accessToken,
         expiryMs: entry.expiryMs || Date.now() + 15 * 60 * 1000,
@@ -160,7 +159,6 @@ function writeCachedToken(entry) {
       }),
       { mode: 0o600 }
     );
-    fs.renameSync(tmpPath, TOKEN_CACHE_PATH);
   } catch {
     // ignore write failures
   }

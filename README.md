@@ -12,39 +12,44 @@
 
 ## 🇬🇧 English Documentation
 
-**`agy-quota-live`** is a zero-dependency, cross-platform (Windows, macOS, Linux) status-line HUD plugin for **Google Antigravity CLI (`agy`)** that displays session telemetry and **all `/quota` model groups in real time** in a compact **2-line layout**.
+**`agy-quota-live`** is a zero-dependency, cross-platform (Windows, macOS, Linux) status-line HUD plugin for **Google Antigravity CLI (`agy`)** that displays session telemetry, active models, and **all `/quota` model groups in real time** in a compact **2-line layout** (or an optional **3-line dashboard layout**).
 
 ```text
-◆ Gemini 4 Argon (High) [Pro] [Auto] │ Ctx ██░░░░░░ 29% (58k/200k) │ kalabs ⎇ main │ ● Idle ⚡
-Gem 5h ████ 100% (5h00m) · Sem ████ 99% (6d13h) │ Claude/GPT 5h ████ 100% (5h00m) · Sem ██░░ 54% (6d13h) │ ▸Argon Sem ██░░ 62% (6d12h)
+◆ Gemini 4 Hydrogen (XHigh) [Pro] [Auto] │ Ctx ▌░░░░░░░ 6% (58k/1M) │ development ⎇ main │ ◈ 1sub ⏱ 1 │ ● Idle $0.42 ⚡
+▸Gem(Neon·Hydro·3.8F) 5h ███▌ 86% (4h43m) · Sem ███▊ 95% (6d2h) │ Claude 5.5/GPT 5h ████ 100% · Sem ████ 100% │ Argon Sem ████ 100%
 ```
 
-### Why `agy-quota-live`?
+### What's New in `v1.1.0`
 
-Existing HUD plugins (such as `agy-hud`) suffer from three critical issues on recent Antigravity CLI versions (`1.4.x+`):
-1. **Missing Quota Groups (`Gemini` & `Gemini 4 Argon`)**: Legacy HUDs call `retrieveUserQuotaSummary` with an outdated `User-Agent` (`antigravity/0.3.x`), causing Google's backend to return only the `Claude and GPT models` group and omit `Gemini Models` and `Gemini 4 Argon`.
-2. **Incomplete Bucket Parsing**: `gemini-argon-wtu-weekly` is ignored by legacy parsers, and Protobuf JSON's omission of `remainingFraction: 0` when a bucket reaches `0%` causes exhausted buckets to be misreported.
-3. **Stale Quota Numbers**: Relying on 2-minute caches or overwriting cloud quota with `stdin` `payload.quota` causes the status bar to lag behind `/quota` after turns complete.
+- **Full Support for `agy 1.5.x` Models & Quotas**:
+  - Dynamically parses model rosters from `retrieveUserQuotaSummary` (`groupDescription`), automatically listing **Gemini 4 Neon**, **Gemini 4 Hydrogen**, **Gemini 3.8 Flash**, **Claude Opus 5.5**, **Claude Sonnet 5.5**, **GPT-OSS 120B**, **Gemini 4 Argon**, and **Gemini 4 Carbon** (Ultra/Enterprise).
+  - **Orchestrator & Effort Awareness**: Recognizes `Orchestrator (Neon)`, `Orchestrator (Carbon)`, `Orchestrator (Argon)`, `Orchestrator (Opus 5.5)`, and `settings.json` orchestrator settings—highlighting the planner group with `▸` and secondary executor group with `▹` when they span different buckets.
+  - **Ultra Plan Fallback**: Correctly highlights `Gem` when running `Gemini 4 Argon` on Google AI Ultra (where Argon shares the Gemini bucket).
+- **Refined Terminal UI**:
+  - **Smooth 1/8th Sub-Character Bars (`▏▎▍▌▋▊▉█`)**: 8× higher visual precision so `92%` is visually distinct from `100%` and `6%` context never looks empty.
+  - **Distinct Tier vs. Mode Badges**: Separates `[Pro]`/`[Ultra]` from `[Auto]`/`[Plan]`/`[Edit]` with distinct readable 256-color ANSI tokens (compatible with Solarized Dark and dark/light terminals).
+  - **Live `agy 1.5.x` Telemetry (when active)**: Shows running subagents (`◈ Nsub`), background tasks (`⏱ N`), queued prompts (`✉ N`), pending confirmations (`⚠ Confirm`), and Vim mode (`[N]`/`[I]`/`[V]`).
+  - **Smart Responsive Scaling & Optional 3-Line Mode**: Keeps bars visible down to ~100 columns, displays group model tags automatically when width permits, and includes a 3-line dashboard view (`node src/cli.js config layout 3line`).
 
 ### Key Features
 
-- **All 3 Groups & 5 Buckets from `/quota`**:
-  - **Gemini Models**: 5-Hour (`gemini-5h`) & Weekly (`gemini-weekly`)
-  - **Claude & GPT Models**: 5-Hour (`3p-5h`) & Weekly (`3p-weekly`)
-  - **Gemini 4 Argon**: Weekly (`gemini-argon-wtu-weekly`) + any future buckets dynamically
-- **Same Convention as `/quota`**: Shows **% remaining** (color-coded: Green `>50%`, Yellow `25–50%`, Orange `10–25%`, Red `≤10%`) + **reset countdown** (`4h59m`, `6d12h`) and highlights the active model's quota group with `▸`.
+- **All `/quota` Groups in Real Time**:
+  - **Gemini Models**: `Gemini 4 Neon`, `Gemini 4 Hydrogen`, `Gemini 3.8 Flash` (`gemini-5h`, `gemini-weekly`)
+  - **Claude & GPT Models**: `Claude Opus 5.5`, `Claude Sonnet 5.5`, `GPT-OSS 120B` (`3p-5h`, `3p-weekly`)
+  - **Gemini 4 Argon**: Separate Pro weekly bucket (`gemini-argon-wtu-weekly`) or shared Ultra bucket
+  - **Gemini 4 Carbon & Future Buckets**: Dynamic bucket metadata & `disabled` / `remainingAmount` support
+- **Same Convention as `/quota`**: Shows **% remaining** (Green `>50%`, Yellow `25–50%`, Orange `10–25%`, Red `≤10%`) + **reset countdown** (`4h43m`, `6d2h`).
 - **True Real-Time Sync (~200ms, 0 Token Cost)**:
-  - **`PostInvocation` & `Stop` Lifecycle Hooks (`hooks.json`)**: Triggers a non-blocking background refresh during tool loops (`<5ms` overhead) and a synchronous cloud sync right when a turn ends so the idle redraw is immediately up-to-date.
-  - **Monotonic Window Merger**: Combines `retrieveUserQuotaSummary` cloud data with `stdin` `payload.quota` using `Math.min` within the same reset window so whichever source updates first wins immediately.
-  - **Fast Cross-Platform OAuth Keychain Cache**: Reads the Antigravity OAuth token from Windows Credential Manager (`gemini:antigravity` via P/Invoke `CredRead`), macOS Keychain (`security`), or Linux `secret-tool`, caching it locally with `0600` permissions and auto-refreshing on expiry/HTTP 401.
-- **Responsive 2-Line Layout**: Automatically adapts to narrow terminals (`terminal_width`) without wrapping into 3+ lines.
+  - **`SessionStart`, `PostInvocation` & `Stop` Hooks (`hooks.json`)**: Triggers non-blocking background refresh during tool loops and synchronous cloud sync on turn end.
+  - **Monotonic Window Merger**: Combines `retrieveUserQuotaSummary` with `stdin` `payload.quota` via `Math.min` within the active reset window.
+  - **Windows-Safe Atomic Cache Writes**: Handles concurrent statusline/hook updates cleanly without leaving `.tmp` files behind.
 
 ---
 
 ### Installation (English)
 
 #### Requirements
-- **Antigravity CLI (`agy`)** `1.3.5+` (tested on `1.4.5`)
+- **Antigravity CLI (`agy`)** `1.3.5+` (tested on `1.5.14`)
 - **Node.js** `18+`
 
 #### Option A: Clone directly into Antigravity Plugins (Recommended)
@@ -63,29 +68,27 @@ agy plugin enable agy-quota-live
 node ~/.gemini/config/plugins/agy-quota-live/src/cli.js install
 ```
 
-#### Option B: Install via `agy plugin install`
-If you cloned the repository to another folder, stage a clean folder (without `.git`) and install it:
-
-```bash
-node src/cli.js install
-```
-> Note: Once the plugin is enabled in Antigravity, its `SessionStart` and `PostInvocation` hooks in `hooks.json` will also automatically ensure `statusLine` is wired in `~/.gemini/antigravity-cli/settings.json`.
-
 ---
 
-### CLI Commands & Diagnostics
+### CLI Commands & Configuration
 
 ```bash
-# Inspect OAuth token status, all 5 /quota buckets, and preview the 2-line HUD
+# Inspect OAuth token status, all /quota groups & models, and preview the HUD
 node ~/.gemini/config/plugins/agy-quota-live/src/cli.js doctor
 
-# Force a background quota cache refresh
+# View or change HUD preferences (~/.gemini/antigravity-cli/agy-quota-live.json)
+node ~/.gemini/config/plugins/agy-quota-live/src/cli.js config
+node ~/.gemini/config/plugins/agy-quota-live/src/cli.js config layout 3line        # 2line | 3line
+node ~/.gemini/config/plugins/agy-quota-live/src/cli.js config showGroupModels auto # auto | always | never
+node ~/.gemini/config/plugins/agy-quota-live/src/cli.js config smoothBars true    # true | false
+node ~/.gemini/config/plugins/agy-quota-live/src/cli.js config showTelemetry true # true | false
+node ~/.gemini/config/plugins/agy-quota-live/src/cli.js config reset
+
+# Force a quota cache refresh
 node ~/.gemini/config/plugins/agy-quota-live/src/cli.js refresh
 
-# Wire statusLine in ~/.gemini/antigravity-cli/settings.json
+# Wire or remove statusLine in ~/.gemini/antigravity-cli/settings.json
 node ~/.gemini/config/plugins/agy-quota-live/src/cli.js install
-
-# Remove statusLine wiring from settings.json
 node ~/.gemini/config/plugins/agy-quota-live/src/cli.js uninstall
 ```
 
@@ -93,78 +96,26 @@ node ~/.gemini/config/plugins/agy-quota-live/src/cli.js uninstall
 
 ## 🇪🇸 Documentación en Español
 
-**`agy-quota-live`** es un plugin de barra de estado (HUD) sin dependencias externas y multiplataforma (Windows, macOS y Linux) para **Google Antigravity CLI (`agy`)**. Muestra toda la telemetría de tu sesión y **todos los grupos de cuotas de `/quota` en tiempo real** en un diseño compacto de **2 líneas**.
+**`agy-quota-live`** es un plugin de barra de estado (HUD) sin dependencias externas y multiplataforma (Windows, macOS y Linux) para **Google Antigravity CLI (`agy`)**. Muestra toda la telemetría de tu sesión, el modelo activo y **todos los grupos y modelos de `/quota` en tiempo real** en un diseño compacto de **2 líneas** (o modo **dashboard de 3 líneas** opcional).
 
 ```text
-◆ Gemini 4 Argon (High) [Pro] [Auto] │ Ctx ██░░░░░░ 29% (58k/200k) │ kalabs ⎇ main │ ● Idle ⚡
-Gem 5h ████ 100% (5h00m) · Sem ████ 99% (6d13h) │ Claude/GPT 5h ████ 100% (5h00m) · Sem ██░░ 54% (6d13h) │ ▸Argon Sem ██░░ 62% (6d12h)
+◆ Gemini 4 Hydrogen (XHigh) [Pro] [Auto] │ Ctx ▌░░░░░░░ 6% (58k/1M) │ development ⎇ main │ ◈ 1sub ⏱ 1 │ ● Idle $0.42 ⚡
+▸Gem(Neon·Hydro·3.8F) 5h ███▌ 86% (4h43m) · Sem ███▊ 95% (6d2h) │ Claude 5.5/GPT 5h ████ 100% · Sem ████ 100% │ Argon Sem ████ 100%
 ```
 
-### ¿Por qué `agy-quota-live`?
+### Novedades en `v1.1.0`
 
-Los plugins de HUD anteriores (como `agy-hud`) tienen tres problemas críticos en las versiones actuales de Antigravity CLI (`1.4.x+`):
-1. **Faltan grupos de cuotas (`Gemini` y `Gemini 4 Argon`)**: llaman al endpoint `retrieveUserQuotaSummary` con un `User-Agent` viejo (`antigravity/0.3.x`), por lo que el servidor de Google solo devuelve el grupo `Claude and GPT models` y omite `Gemini Models` y `Gemini 4 Argon`.
-2. **Parser incompleto**: ignoran el bucket `gemini-argon-wtu-weekly` y no contemplan que Protobuf JSON omite `remainingFraction: 0` cuando una cuota llega a `0%`.
-3. **Datos desactualizados**: usan cachés de 2 minutos y pisan la respuesta de la nube con el objeto `quota` de `stdin`, haciendo que el HUD quede atrasado respecto a `/quota`.
+- **Soporte completo para los nuevos modelos de `agy 1.5.x`**:
+  - Lee dinámicamente los modelos informados por `retrieveUserQuotaSummary` (`Gemini 4 Neon`, `Gemini 4 Hydrogen`, `Gemini 3.8 Flash`, `Claude Opus 5.5`, `Claude Sonnet 5.5`, `GPT-OSS 120B`, `Gemini 4 Argon` y `Gemini 4 Carbon`).
+  - **Soporte para `Orchestrator` y esfuerzo (`XHigh`, `Max`, etc.)**: Detecta `Orchestrator (Neon)`, `Orchestrator (Carbon)`, `Orchestrator (Argon)`, `Orchestrator (Opus 5.5)` y configuración en `settings.json`, destacando con `▸` el grupo planificador y con `▹` el ejecutor si pertenecen a cuotas distintas.
+  - **Fallback en planes Ultra**: Resalta `Gem` cuando usás `Gemini 4 Argon` en Google AI Ultra (donde Argon comparte cuota con Gemini).
+- **Mejoras de interfaz**:
+  - **Barras suaves de alta precisión (`▏▎▍▌▋▊▉█`)**: 8× más detalle visual para distinguir porcentajes altos y contextos bajos.
+  - **Colores diferenciados y legibles en Solarized Dark**: Distinción clara entre plan (`[Pro]`/`[Ultra]`), modo (`[Auto]`/`[Plan]`/`[Edit]`) y nivel de esfuerzo (`(XHigh)`).
+  - **Telemetría activa de `agy 1.5.x`**: Muestra subagentes corriendo (`◈ Nsub`), tareas en segundo plano (`⏱ N`), mensajes en cola (`✉ N`), confirmaciones pendientes (`⚠ Confirm`) y modo Vim (`[N]`/`[I]`/`[V]`).
+  - **Escalado inteligente y modo opcional de 3 líneas**: Mantiene las barras visibles incluso a ~100 columnas y permite activar vista dashboard de 3 líneas con `node src/cli.js config layout 3line`.
 
-### Características Principales
-
-- **Los 3 Grupos y 5 Buckets de `/quota` en una sola línea**:
-  - **Gemini Models**: 5 horas (`gemini-5h`) y Semanal (`gemini-weekly`)
-  - **Claude & GPT Models**: 5 horas (`3p-5h`) y Semanal (`3p-weekly`)
-  - **Gemini 4 Argon**: Semanal (`gemini-argon-wtu-weekly`) + soporte dinámico para nuevos buckets
-- **Misma convención que `/quota`**: muestra el **% restante** (codificado por color: Verde `>50%`, Amarillo `25–50%`, Naranja `10–25%`, Rojo `≤10%`) + **cuenta regresiva de reinicio** (`4h59m`, `6d12h`), destacando con `▸` el grupo que consume tu modelo activo.
-- **Sincronización en Tiempo Real (~200ms, 0 consumo de tokens)**:
-  - **Hooks de ciclo de vida (`PostInvocation` y `Stop` en `hooks.json`)**: lanza una actualización en segundo plano sin bloqueo entre llamadas a herramientas (`<5ms`) y sincroniza la cuota en `Stop` apenas termina cada respuesta del modelo.
-  - **Fusión Monotónica (`mergeQuotas`)**: combina los datos en vivo de `retrieveUserQuotaSummary` con el payload de `stdin` tomando `Math.min` dentro de la misma ventana de reinicio para reflejar el consumo al instante.
-  - **Lectura Rápida de Credenciales OAuth**: obtiene el token desde el Administrador de Credenciales de Windows (`gemini:antigravity` vía P/Invoke `CredRead`), Keychain de macOS (`security`) o `secret-tool` en Linux, guardando una caché local con permisos `0600` y renovándola automáticamente si expira o recibe HTTP `401`.
-- **Diseño Adaptativo de 2 Líneas**: se ajusta automáticamente al ancho de la terminal (`terminal_width`) sin desbordarse en más líneas.
-
----
-
-### Instalación (Español)
-
-#### Requisitos
-- **Antigravity CLI (`agy`)** `1.3.5+` (probado en `1.4.5`)
-- **Node.js** `18+`
-
-#### Opción A: Clonar directamente en la carpeta de plugins de Antigravity (Recomendado)
-
-**Windows (PowerShell):**
-```powershell
-git clone https://github.com/LautaroZapata/agy-quota-live.git "$HOME\.gemini\config\plugins\agy-quota-live"
-agy plugin enable agy-quota-live
-node "$HOME\.gemini\config\plugins\agy-quota-live\src\cli.js" install
-```
-
-**macOS / Linux:**
-```bash
-git clone https://github.com/LautaroZapata/agy-quota-live.git ~/.gemini/config/plugins/agy-quota-live
-agy plugin enable agy-quota-live
-node ~/.gemini/config/plugins/agy-quota-live/src/cli.js install
-```
-
-> Nota: si tienes instalado `agy-hud`, puedes deshabilitarlo con `agy plugin disable agy-hud`. Además, cuando `agy-quota-live` está habilitado, el hook `SessionStart` configura automáticamente `statusLine` en `~/.gemini/antigravity-cli/settings.json`.
-
----
-
-### Comandos de Diagnóstico y Utilidades
-
-```powershell
-# Ver estado del token OAuth, detalle de los 5 buckets de /quota y vista previa del HUD
-node "$HOME\.gemini\config\plugins\agy-quota-live\src\cli.js" doctor
-
-# Forzar actualización manual de la caché de cuotas
-node "$HOME\.gemini\config\plugins\agy-quota-live\src\cli.js" refresh
-
-# Configurar statusLine en ~/.gemini/antigravity-cli/settings.json
-node "$HOME\.gemini\config\plugins\agy-quota-live\src\cli.js" install
-
-# Desinstalar statusLine de settings.json
-node "$HOME\.gemini\config\plugins\agy-quota-live\src\cli.js" uninstall
-```
-
----
+Para la guía completa en español, consulta **[README.es.md](README.es.md)**.
 
 ### Project Structure / Estructura del Proyecto
 
@@ -179,14 +130,17 @@ agy-quota-live/
 │   ├── agy-quota-live.cmd      # Windows statusLine launcher
 │   └── agy-quota-live.sh       # macOS / Linux statusLine launcher
 ├── src/
-│   ├── cli.js                  # Entrypoint (statusline, doctor, install, hooks)
+│   ├── cli.js                  # Entrypoint (statusline, doctor, config, install, hooks)
+│   ├── config.js               # User HUD preferences & atomic file writer
 │   ├── installer.js            # Auto-configures statusLine in settings.json
-│   ├── quota.js                # Cloud Code retrieveUserQuotaSummary client & cache merger
-│   ├── render.js               # 2-line responsive ANSI HUD renderer
+│   ├── quota.js                # Cloud Code retrieveUserQuotaSummary client & merger
+│   ├── render.js               # Responsive 2-line / 3-line ANSI HUD renderer
 │   └── token.js                # Cross-platform OAuth token reader & local cache
-└── skills/
-    └── quota-live/
-        └── SKILL.md            # Built-in skill for agent diagnostics
+├── skills/
+│   └── quota-live/
+│       └── SKILL.md            # Built-in skill for agent diagnostics
+└── test/
+    └── quota-live.test.js      # Automated test suite (node:test)
 ```
 
 ## License / Licencia
